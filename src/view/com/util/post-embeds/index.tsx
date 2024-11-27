@@ -6,6 +6,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native'
+import {MeasuredDimensions, runOnJS, runOnUI} from 'react-native-reanimated'
 import {Image} from 'expo-image'
 import {
   AppBskyEmbedExternal,
@@ -20,14 +21,16 @@ import {
   ModerationDecision,
 } from '@atproto/api'
 
+import {HandleRef, measureHandle} from '#/lib/hooks/useHandleRef'
 import {usePalette} from '#/lib/hooks/usePalette'
-import {ImagesLightbox, useLightboxControls} from '#/state/lightbox'
+import {useLightboxControls} from '#/state/lightbox'
 import {useModerationOpts} from '#/state/preferences/moderation-opts'
 import {FeedSourceCard} from '#/view/com/feeds/FeedSourceCard'
 import {atoms as a, useTheme} from '#/alf'
 import * as ListCard from '#/components/ListCard'
 import {Embed as StarterPackCard} from '#/components/StarterPack/StarterPackCard'
 import {ContentHider} from '../../../../components/moderation/ContentHider'
+import {Dimensions} from '../../lightbox/ImageViewing/@types'
 import {AutoSizedImage} from '../images/AutoSizedImage'
 import {ImageLayoutGrid} from '../images/ImageLayoutGrid'
 import {ExternalLinkEmbed} from './ExternalLinkEmbed'
@@ -134,11 +137,36 @@ export function PostEmbeds({
     if (images.length > 0) {
       const items = embed.images.map(img => ({
         uri: img.fullsize,
+        thumbUri: img.thumb,
         alt: img.alt,
-        aspectRatio: img.aspectRatio,
+        dimensions: img.aspectRatio ?? null,
       }))
-      const _openLightbox = (index: number) => {
-        openLightbox(new ImagesLightbox(items, index))
+      const _openLightbox = (
+        index: number,
+        thumbRects: (MeasuredDimensions | null)[],
+        fetchedDims: (Dimensions | null)[],
+      ) => {
+        openLightbox({
+          images: items.map((item, i) => ({
+            ...item,
+            thumbRect: thumbRects[i] ?? null,
+            thumbDimensions: fetchedDims[i] ?? null,
+            type: 'image',
+          })),
+          index,
+        })
+      }
+      const onPress = (
+        index: number,
+        refs: HandleRef[],
+        fetchedDims: (Dimensions | null)[],
+      ) => {
+        const handles = refs.map(r => r.current)
+        runOnUI(() => {
+          'worklet'
+          const rects = handles.map(measureHandle)
+          runOnJS(_openLightbox)(index, rects, fetchedDims)
+        })()
       }
       const onPressIn = (_: number) => {
         InteractionManager.runAfterInteractions(() => {
@@ -161,7 +189,9 @@ export function PostEmbeds({
                     : 'constrained'
                 }
                 image={image}
-                onPress={() => _openLightbox(0)}
+                onPress={(containerRef, dims) =>
+                  onPress(0, [containerRef], [dims])
+                }
                 onPressIn={() => onPressIn(0)}
                 hideBadge={
                   viewContext === PostEmbedViewContext.FeedEmbedRecordWithMedia
@@ -177,7 +207,7 @@ export function PostEmbeds({
           <View style={[a.mt_sm, style]}>
             <ImageLayoutGrid
               images={embed.images}
-              onPress={_openLightbox}
+              onPress={onPress}
               onPressIn={onPressIn}
               viewContext={viewContext}
             />

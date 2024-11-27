@@ -7,9 +7,15 @@ import {AppBskyFeedDefs, AppBskyFeedThreadgate} from '@atproto/api'
 import {msg, Trans} from '@lingui/macro'
 import {useLingui} from '@lingui/react'
 
+import {useInitialNumToRender} from '#/lib/hooks/useInitialNumToRender'
+import {useMinimalShellFabTransform} from '#/lib/hooks/useMinimalShellTransform'
+import {useSetTitle} from '#/lib/hooks/useSetTitle'
+import {useWebMediaQueries} from '#/lib/hooks/useWebMediaQueries'
 import {moderatePost_wrapped as moderatePost} from '#/lib/moderatePost_wrapped'
 import {clamp} from '#/lib/numbers'
 import {ScrollProvider} from '#/lib/ScrollContext'
+import {sanitizeDisplayName} from '#/lib/strings/display-names'
+import {cleanError} from '#/lib/strings/errors'
 import {isAndroid, isNative, isWeb} from '#/platform/detection'
 import {useModerationOpts} from '#/state/preferences/moderation-opts'
 import {
@@ -26,13 +32,7 @@ import {usePreferencesQuery} from '#/state/queries/preferences'
 import {useSession} from '#/state/session'
 import {useComposerControls} from '#/state/shell'
 import {useMergedThreadgateHiddenReplies} from '#/state/threadgate-hidden-replies'
-import {useInitialNumToRender} from 'lib/hooks/useInitialNumToRender'
-import {useMinimalShellFabTransform} from 'lib/hooks/useMinimalShellTransform'
-import {useSetTitle} from 'lib/hooks/useSetTitle'
-import {useWebMediaQueries} from 'lib/hooks/useWebMediaQueries'
-import {sanitizeDisplayName} from 'lib/strings/display-names'
-import {cleanError} from 'lib/strings/errors'
-import {CenteredView} from 'view/com/util/Views'
+import {CenteredView} from '#/view/com/util/Views'
 import {atoms as a, useTheme} from '#/alf'
 import {ListFooter, ListMaybePlaceholder} from '#/components/Lists'
 import {Text} from '#/components/Typography'
@@ -104,6 +104,7 @@ export function PostThread({uri}: {uri: string | undefined}) {
     error: threadError,
     refetch,
     data: {thread, threadgate} = {},
+    dataUpdatedAt: fetchedAt,
   } = usePostThreadQuery(uri)
 
   const treeView = React.useMemo(
@@ -171,6 +172,8 @@ export function PostThread({uri}: {uri: string | undefined}) {
     () => new Set<string>(),
   )
 
+  const [fetchedAtCache] = React.useState(() => new Map<string, number>())
+  const [randomCache] = React.useState(() => new Map<string, number>())
   const skeleton = React.useMemo(() => {
     const threadViewPrefs = preferences?.threadViewPrefs
     if (!threadViewPrefs || !thread) return null
@@ -183,6 +186,9 @@ export function PostThread({uri}: {uri: string | undefined}) {
         currentDid,
         justPostedUris,
         threadgateHiddenReplies,
+        fetchedAtCache,
+        fetchedAt,
+        randomCache,
       ),
       currentDid,
       treeView,
@@ -199,6 +205,9 @@ export function PostThread({uri}: {uri: string | undefined}) {
     hiddenRepliesState,
     justPostedUris,
     threadgateHiddenReplies,
+    fetchedAtCache,
+    fetchedAt,
+    randomCache,
   ])
 
   const error = React.useMemo(() => {
@@ -535,7 +544,7 @@ function MobileComposePrompt({onPressReply}: {onPressReply: () => unknown}) {
         styles.prompt,
         fabMinimalShellTransform,
         {
-          bottom: clamp(safeAreaInsets.bottom, 15, 30),
+          bottom: clamp(safeAreaInsets.bottom, 13, 30),
         },
       ]}>
       <PostThreadComposePrompt onPressCompose={onPressReply} />
